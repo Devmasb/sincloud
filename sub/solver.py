@@ -223,7 +223,7 @@ if __name__ == "__main__":
         challenge_type=ChallengeType.TURNSTILE,
         proxy="http://127.0.0.1:10808",
         debug=True,
-        headless=False,
+        headless=True,
     )
     result = asyncio.run(solver.solve("https://nopecha.com/captcha/turnstile"))
 
@@ -240,7 +240,7 @@ if __name__ == "__main__":
         challenge_type=ChallengeType.CHALLENGE,
         proxy="http://127.0.0.1:10808",
         debug=True,
-        headless=False,
+        headless=True,
     )
     result_challenge = asyncio.run(
         solver_challenge.solve("https://nopecha.com/demo/cloudflare")
