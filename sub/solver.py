@@ -77,7 +77,7 @@ class CloudflareSolver:
         headless: bool = True,
         os: Optional[List[str]] = None,
         debug: bool = False,
-        retries: int = 300,
+        retries: int = 30,
         proxy: Optional[str] = None,
     ) -> None:
         """Initialize solver with given parameters."""
@@ -166,7 +166,7 @@ class CloudflareSolver:
                 proxy=proxy_config,
             ) as browser:
                 page = await browser.new_page()
-                await page.goto(link)
+                await page.goto(link, wait_until="domcontentloaded", timeout=180000)
 
                 for _ in range(self.retries):
                     if await self._find_and_click_challenge_frame(page):
