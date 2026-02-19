@@ -12,6 +12,7 @@ Flag = True
 
 async def handle_message(window, event, message):
     new_order_file = f'{CACHE_DIR}new_order.json'
+    print(event)
     if event == '↓':
         global Flag
         if all(s in message for s in ['{"asset":']):

@@ -77,6 +77,30 @@ async def run_browser_script(user_input):
             # Open a webpage
             await trade_page.goto(url, timeout=60000)
 
+            # Esperar a que Cloudflare se resuelva
+            try:
+                # Esperar hasta que la red esté estable (challenge suele durar 5-10s)
+                await trade_page.wait_for_load_state("networkidle", timeout=15000)
+
+                # Verificar si la cookie cf_clearance está presente
+                cookies = await context.cookies()
+                cf_cookie = [c for c in cookies if c["name"] == "cf_clearance"]
+
+                if cf_cookie:
+                    print("? Cloudflare challenge resuelto, cookie valida:", cf_cookie[0]["value"])
+                else:
+                    # También puedes detectar texto típico en la página
+                    if await trade_page.locator("text=Checking your browser").count() > 0:
+                        raise Exception("? Cloudflare challenge no se resolvio correctamente")
+                    else:
+                        print("?? No hubo challenge, continuando al login...")
+
+            except Exception as e:
+                print(f"Error esperando Cloudflare: {e}")
+                await browser.close()
+                return
+                
+
             # Start the periodic deletion in the background
             cookie_task = asyncio.create_task(periodic_cookie_deletion(trade_page.context, 'cf_clearance', 5))
 
