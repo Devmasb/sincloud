@@ -76,6 +76,8 @@ async def run_browser_script(user_input):
 
             # Open a webpage
             await trade_page.goto(url, timeout=60000)
+            html = await trade_page.content()
+            print(html[:1000])  # primeras líneas
 
             # Esperar a que Cloudflare se resuelva
             try:
