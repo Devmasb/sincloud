@@ -1,0 +1,1 @@
+{"account_type": "demo", "trading_type": "martingale", "bet_level": 11, "bet_amounts": [20, 42, 88, 185, 389, 817], "financial_instruments": "currency", "market_type": "otc", "asset_type": "GBPAUD_otc", "time_option": 1, "trade_time": 60, "minimum_return": 60, "trade_option": "random", "profit_target": 100, "loss_target": 2000}
