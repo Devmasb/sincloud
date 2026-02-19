@@ -221,7 +221,6 @@ if __name__ == "__main__":
     print("Turnstile Example")
     solver = CloudflareSolver(
         challenge_type=ChallengeType.TURNSTILE,
-        proxy="http://127.0.0.1:10808",
         debug=True,
         headless=True,
     )
@@ -238,7 +237,6 @@ if __name__ == "__main__":
     print("\nChallenge Example")
     solver_challenge = CloudflareSolver(
         challenge_type=ChallengeType.CHALLENGE,
-        proxy="http://127.0.0.1:10808",
         debug=True,
         headless=True,
     )
