@@ -77,7 +77,7 @@ class CloudflareSolver:
         headless: bool = True,
         os: Optional[List[str]] = None,
         debug: bool = False,
-        retries: int = 30,
+        retries: int = 300,
         proxy: Optional[str] = None,
     ) -> None:
         """Initialize solver with given parameters."""
