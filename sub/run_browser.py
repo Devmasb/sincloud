@@ -10,7 +10,7 @@ async def run_browser_script(user_input):
     async with async_playwright() as p:
         print("Browser is opening...")
         browser = await p.chromium.launch(
-            headless=True,
+            headless=False,
             args=[
                 '--no-sandbox',
                 '--disable-infobars',
