@@ -80,7 +80,7 @@ async def run_browser_script(user_input):
             # Esperar a que Cloudflare se resuelva
             try:
                 # Esperar hasta que la red esté estable (challenge suele durar 5-10s)
-                await trade_page.wait_for_load_state("networkidle", timeout=15000)
+                await trade_page.wait_for_load_state("networkidle", timeout=60000)
 
                 # Verificar si la cookie cf_clearance está presente
                 cookies = await context.cookies()
