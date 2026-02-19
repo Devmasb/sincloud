@@ -5,8 +5,27 @@ from playwright.async_api import async_playwright
 from sub.handle_message import handle_message
 from playwright._impl._errors import TargetClosedError
 
+# Importar el solver
+from sub.solver import CloudflareSolver, ChallengeType
+
 COOKIE_DIR = './cookies/'
+
 async def run_browser_script(user_input):
+    # Primero resolver Cloudflare antes de abrir el navegador principal
+    solver = CloudflareSolver(
+        challenge_type=ChallengeType.CHALLENGE,  # o TURNSTILE si aplica
+        headless=True,
+        os=["windows"],
+        debug=True,
+        retries=30
+    )
+    result = await solver.solve("https://qxbroker.com/en/trade")
+
+    if not result:
+        raise Exception("? No se pudo resolver Cloudflare challenge")
+
+    print(f"? Cloudflare resuelto: {result.name}={result.value}")
+
     async with async_playwright() as p:
         print("Browser is opening...")
         browser = await p.chromium.launch(
@@ -22,16 +41,31 @@ async def run_browser_script(user_input):
         )
 
         context = await browser.new_context(
-            user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36', viewport={'width': 1366, 'height': 768}
+            user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
+                       '(KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+            viewport={'width': 1366, 'height': 768}
         )
 
         trade_page = await context.new_page()
 
-        url = {'live': 'https://qxbroker.com/en/trade', 'demo': 'https://qxbroker.com/en/demo-trade'}[user_input['account_type']]
+        url = {'live': 'https://qxbroker.com/en/trade',
+               'demo': 'https://qxbroker.com/en/demo-trade'}[user_input['account_type']]
         urlcookie1 = 'https://qxbroker.com/'
         urlcookie2 = 'https://ws2.qxbroker.com/'
 
-        # Function to delete a specific HTTP-only cookie by name
+        # Inyectar la cookie cf_clearance obtenida por el solver
+        await context.add_cookies([{
+            "name": result.name,
+            "value": result.value,
+            "domain": result.domain,
+            "path": result.path,
+            "expires": result.expires,
+            "httpOnly": result.http_only,
+            "secure": result.secure,
+            "sameSite": result.same_site
+        }])
+
+        # Funci para borrar cookies especficas
         async def delete_specific_cookie(context, cookie_name):
             try:
                 cookies = await context.cookies()
@@ -42,15 +76,13 @@ async def run_browser_script(user_input):
                             domain=cookie['domain'],
                             path=cookie['path']
                         )
-                        #print(f"Cookie '{cookie_name}' deleted")
                         return
-                #print(f"Cookie '{cookie_name}' not found")
             except TargetClosedError:
                 print("Context or page is closed, cannot delete cookie.")
             except Exception as e:
                 print(f"Error deleting cookie: {e}")
 
-        # Function to run the deletion periodically
+        # Funci√≥n para borrar cookies peri√≥dicamente
         async def periodic_cookie_deletion(context, cookie_name, interval):
             while True:
                 try:
@@ -64,65 +96,50 @@ async def run_browser_script(user_input):
                 await asyncio.sleep(interval)
 
         try:
-            # Expose the handle_message function to JavaScript
-            await trade_page.expose_function('notifyBackend', lambda event, message: handle_message(trade_page, event, message))
+            # Exponer funci√≥n para mensajes WebSocket
+            await trade_page.expose_function(
+                'notifyBackend',
+                lambda event, message: handle_message(trade_page, event, message)
+            )
 
-            # Inject cookies before opening the page
-            await trade_page.context.add_cookies(build_cookie(loads_cookie(common.file_get_contents(f"{COOKIE_DIR}{common.gstrb('//', '/', url)}.txt")), urlcookie1))
-            await trade_page.context.add_cookies(build_cookie(loads_cookie(common.file_get_contents(f"{COOKIE_DIR}{common.gstrb('//', '/', url)}.txt")), urlcookie2))
+            # Inyectar cookies guardadas en archivos locales
+            await trade_page.context.add_cookies(
+                build_cookie(
+                    loads_cookie(common.file_get_contents(f"{COOKIE_DIR}{common.gstrb('//', '/', url)}.txt")),
+                    urlcookie1
+                )
+            )
+            await trade_page.context.add_cookies(
+                build_cookie(
+                    loads_cookie(common.file_get_contents(f"{COOKIE_DIR}{common.gstrb('//', '/', url)}.txt")),
+                    urlcookie2
+                )
+            )
 
-            # Inject the JavaScript WebSocket Hook script before the page's own scripts run
-            await trade_page.add_init_script(common.file_get_contents('bypass.js') + common.file_get_contents('wsHook.js'))
+            # Inyectar scripts antes de que cargue la p√°gina
+            await trade_page.add_init_script(
+                common.file_get_contents('bypass.js') + common.file_get_contents('wsHook.js')
+            )
 
-            # Open a webpage
+            # Abrir la p√°gina de trading
             await trade_page.goto(url, timeout=60000)
-            html = await trade_page.content()
-            print(html[:1000])  # primeras lÌneas
+            print("? Pagina cargada con cookie valida")
 
-            # Esperar a que Cloudflare se resuelva
-            try:
-                # Esperar hasta que la red estÈ estable (challenge suele durar 5-10s)
-                await trade_page.wait_for_load_state("networkidle", timeout=60000)
-
-                # Verificar si la cookie cf_clearance est· presente
-                cookies = await context.cookies()
-                cf_cookie = [c for c in cookies if c["name"] == "cf_clearance"]
-
-                if cf_cookie:
-                    print("? Cloudflare challenge resuelto, cookie valida:", cf_cookie[0]["value"])
-                else:
-                    # TambiÈn puedes detectar texto tÌpico en la p·gina
-                    if await trade_page.locator("text=Checking your browser").count() > 0:
-                        raise Exception("? Cloudflare challenge no se resolvio correctamente")
-                    else:
-                        print("?? No hubo challenge, continuando al login...")
-
-            except Exception as e:
-                print(f"Error esperando Cloudflare: {e}")
-                await browser.close()
-                return
-                
-
-            # Start the periodic deletion in the background
+            # Iniciar borrado peri√≥dico de cf_clearance
             cookie_task = asyncio.create_task(periodic_cookie_deletion(trade_page.context, 'cf_clearance', 5))
 
-            # Wait for the page to fully load
+            # Esperar carga completa
             await trade_page.wait_for_load_state('load')
             print("Browser loaded.")
 
-            # Inject another script
-            #await trade_page.evaluate(file_get_contents('bypass.js')+file_get_contents('wsHook.js'))
-
-            # Wait for the page to close
+            # Esperar cierre de la p√°gina
             await trade_page.wait_for_event('close', timeout=0)
-            # Cancel the indefinite task
             cookie_task.cancel()
-            # Keep the browser open indefinitely
-            #await asyncio.Future()  # Run forever
+
         except TargetClosedError:
             print("Context or page is closed, exiting")
         except Exception as e:
-            print(f"Exception during periodic deletion: {e}")
+            print(f"Exception durante ejecuci√≥n: {e}")
         finally:
             pass
 
